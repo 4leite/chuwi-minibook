@@ -64,8 +64,8 @@ show the new refresh rate.
 > between units, and a rate can run cleanly for hours from a cold boot and still
 > fail on the first suspend/resume, taking a revert and a reboot to clear and
 > leaving temporary image retention behind. Suspend-test before relying on it,
-> and see "What rate to use" below. This is why the patch is not part of
-> `bootstrap-ubuntu.sh`.
+> and see "What rate to use" below. This is why the patch is not part of the
+> `bootstrap-ubuntu.sh` / `bootstrap-arch.sh` scripts.
 
 The stock rate is 50 Hz. Try 90 Hz first -- it is a noticeable improvement in
 smoothness and works on most MiniBook X units:
