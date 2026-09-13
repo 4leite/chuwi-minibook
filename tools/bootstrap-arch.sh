@@ -32,7 +32,7 @@ readonly CMDLINE_ARGS=(
 )
 
 # Console rotation does not compose additively with the panel orientation, so
-# try all four values rather than deriving one. See GUIDE.md.
+# try all four values rather than deriving one. See GUIDE-ADVANCED.md.
 readonly FBCON_ROTATE=1
 readonly FBCON_TMPFILES="/etc/tmpfiles.d/fbcon-rotate.conf"
 
@@ -78,10 +78,18 @@ kernel_headers_package() {
 }
 
 # A plain -Sy would leave a partial upgrade behind, so this upgrades the system.
-install_packages() {
-  echo "==> Installing packages"
+upgrade_system() {
   pacman -Syu --needed --noconfirm "${PACMAN_PACKAGES[@]}" \
     "$(kernel_headers_package)"
+}
+
+# Bracketed by the kernel check: a stale kernel picks the wrong headers package,
+# and the upgrade itself can replace the one we booted.
+install_packages() {
+  echo "==> Installing packages"
+  require_running_kernel_current
+  upgrade_system
+  require_running_kernel_current
 }
 
 # acpi_call only drives the tablet-mode keyboard toggle, so a module that is not
@@ -97,8 +105,48 @@ enable_acpi_call() {
     "off until it does" >&2
 }
 
+installed_kernels() {
+  local dir
+
+  for dir in /usr/lib/modules/*/; do
+    if [[ -f "${dir}pkgbase" ]]; then
+      dir="${dir%/}"
+      echo "${dir##*/}"
+    fi
+  done
+}
+
+# pacman replaces the modules directory on a kernel upgrade, so a running kernel
+# with neither a pkgbase nor a headers link is one that is no longer installed.
+running_kernel_is_installed() {
+  local dir
+  dir="/usr/lib/modules/$(uname -r)"
+
+  [[ -f "${dir}/pkgbase" || -e "${dir}/build" ]]
+}
+
+report_kernel_mismatch() {
+  local installed=()
+  mapfile -t installed < <(installed_kernels)
+
+  echo "Error: the running kernel ($(uname -r)) is no longer installed" >&2
+  if (( ${#installed[@]} > 0 )); then
+    echo "       installed instead: ${installed[*]}" >&2
+  fi
+  echo "       Reboot into the new kernel and re-run this script: DKMS" \
+    "builds against the running kernel" >&2
+}
+
 # DKMS builds against the running kernel, so an upgrade that replaced it leaves
 # nothing to build or load modules for until the reboot.
+require_running_kernel_current() {
+  if running_kernel_is_installed; then
+    return
+  fi
+  report_kernel_mismatch
+  exit 1
+}
+
 require_running_kernel_headers() {
   local release
   release="$(uname -r)"
@@ -106,8 +154,8 @@ require_running_kernel_headers() {
   if [[ -d "/usr/lib/modules/${release}/build" ]]; then
     return
   fi
-  echo "No headers for the running kernel (${release}) — if pacman just" \
-    "upgraded the kernel, reboot into it and re-run this script" >&2
+  echo "No headers for the running kernel (${release}) — install the" \
+    "matching headers package and re-run this script" >&2
   exit 1
 }
 

@@ -29,7 +29,7 @@ readonly CMDLINE_ARGS=(
 )
 
 # Console rotation does not compose additively with the panel orientation, so
-# try all four values rather than deriving one. See GUIDE.md.
+# try all four values rather than deriving one. See GUIDE-ADVANCED.md.
 readonly FBCON_ROTATE=1
 readonly FBCON_TMPFILES="/etc/tmpfiles.d/fbcon-rotate.conf"
 
@@ -47,10 +47,81 @@ require_root() {
   fi
 }
 
-install_packages() {
-  echo "==> Installing packages"
+installed_kernels() {
+  local image
+
+  for image in /boot/vmlinuz-*; do
+    if [[ -f "${image}" ]]; then
+      echo "${image##*/vmlinuz-}"
+    fi
+  done
+}
+
+kernel_flavour() {
+  local release="$1"
+
+  if [[ "${release}" =~ ^[0-9.]+-[0-9]+-(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+# Only same-flavour kernels compare: a -lowlatency image sorting above the
+# running -generic one says nothing about which is newer.
+kernels_with_flavour() {
+  local flavour="$1" release
+
+  while read -r release; do
+    if [[ "${release}" == *"-${flavour}" ]]; then
+      echo "${release}"
+    fi
+  done < <(installed_kernels)
+}
+
+newest_installed_kernel() {
+  kernels_with_flavour "$1" \
+    | sort -V \
+    | tail -n1
+}
+
+report_kernel_mismatch() {
+  local running="$1" newest="$2"
+
+  echo "Error: running kernel ${running}, but ${newest} is installed" >&2
+  echo "       Reboot into it and re-run this script: DKMS builds against" \
+    "the running kernel" >&2
+}
+
+# DKMS builds against the running kernel, so modules built now would be missing
+# on the kernel apt has already unpacked.
+require_running_kernel_current() {
+  local running flavour newest
+  running="$(uname -r)"
+  flavour="$(kernel_flavour "${running}")"
+
+  if [[ -z "${flavour}" ]]; then
+    return
+  fi
+
+  newest="$(newest_installed_kernel "${flavour}")"
+  if [[ -z "${newest}" || "${newest}" == "${running}" ]]; then
+    return
+  fi
+  report_kernel_mismatch "${running}" "${newest}"
+  exit 1
+}
+
+apt_install() {
   apt-get update -qq
   apt-get install -y -o DPkg::Lock::Timeout=180 "${APT_PACKAGES[@]}"
+}
+
+# Bracketed by the kernel check: a stale kernel has no headers package left in
+# the archive, and the upgrade itself can pull in a newer one.
+install_packages() {
+  echo "==> Installing packages"
+  require_running_kernel_current
+  apt_install
+  require_running_kernel_current
 }
 
 # acpi_call only drives the tablet-mode keyboard toggle, so a module that is not

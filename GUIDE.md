@@ -1,125 +1,40 @@
 # Installation Guide
 
-## Check current status
+Three steps: run the bootstrap script, flip two BIOS settings, install
+thermald. Reboot when done.
 
-Three diagnostic scripts in `tools/` cover different areas. Each produces a
-warnings section at the end that collects everything that needs fixing.
+This page covers the standard setup. For manual per-component installation,
+GPU setup, display rotation internals and sleep modes, see
+[GUIDE-ADVANCED.md](GUIDE-ADVANCED.md).
 
-### check-status.sh
+## 1. Run the bootstrap script
 
-General system and component status. Runs without root for most checks; root is
-only needed for the VBT section (debugfs).
-
-```
-sudo tools/check-status.sh
-```
-
-| Section            | What it checks                                                                  |
-| ------------------ | ------------------------------------------------------------------------------- |
-| **device**         | DMI vendor/product, CPU model, microcode, BIOS version, DSI display, sleep mode |
-| **kernel cmdline** | `i915.vbt_firmware` (custom VBT), `i915.enable_psr=0` (PSR fix)                 |
-| **vbt**            | Panel refresh rate from VBT Block 58 (needs `intel_vbt_decode` and sudo)        |
-| **prerequisites**  | Build tools: dkms, clang, curl, patch, meson, ninja, kernel headers             |
-| **modules**        | DKMS install state, loaded state, and boot config for each kernel module        |
-| **services**       | thermald and iio-sensor-proxy version, enabled/running state                    |
-
-### dptf-status.sh
-
-DPTF participant status and BIOS settings. Requires root (reads MSRs).
+On Ubuntu or Debian:
 
 ```
-sudo tools/dptf-status.sh
+sudo tools/bootstrap-ubuntu.sh
 ```
 
-| Section           | What it checks                                                                                                                                      |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **modules**       | dptf_enabler loaded/params, int3400_thermal, int340x_thermal_zone, intel_rapl_common                                                                |
-| **dptf manager**  | IETM presence via platform driver, data_vault, active policy UUID                                                                                   |
-| **participants**  | Each DPTF device (TCPU, SEN1-5, DGPU, TFN1-3, CHRG, TPWR, TPCH, BAT1): ACPI status and platform driver binding                                      |
-| **thermal zones** | Temps and trip points for zones thermald monitors (B0D4/TCPU, SEN3, minibook_soc, minibook_charger); shows `[thermald]` if under user_space control |
-| **rapl**          | PL1 from MMIO and MSR powercap, PPCC range from processor thermal PCI device                                                                        |
-| **bios settings** | CFG Lock (MSR 0xE2), RAPL PL1 writability, TCC Activation Offset (MSR 0x1A2)                                                                        |
-
-### gpu-status.sh
-
-GPU and media acceleration. Must be run as your normal user (not root).
+On Arch, CachyOS or Manjaro (with `sudo` from your normal user account, not
+from a root shell — it builds a package, which refuses to run as root):
 
 ```
-tools/gpu-status.sh
+sudo tools/bootstrap-arch.sh
 ```
 
-See [GPU and Vulkan](#gpu-and-vulkan) below for what it checks and how to set up
-GPU support.
+The script installs build dependencies, the four DKMS kernel modules
+(touchscreen fix, EC driver, DPTF enabler, I2C fix), the patched
+iio-sensor-proxy for auto-rotation and tablet mode, and the kernel command
+line arguments for display rotation, deep sleep and the PSR screen-tearing
+fix.
 
-______________________________________________________________________
+It is idempotent — safe to re-run at any time. If it stops with an error
+saying the running kernel is no longer installed, a package upgrade pulled in
+a new kernel: reboot and run it again.
 
-## Install
+## 2. BIOS tweaks
 
-Install components in this order to satisfy dependencies.
-
-Examples below assume **Limine + mkinitcpio** (the CachyOS default). On
-GRUB-based systems, edit `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`
-instead of `/etc/default/limine`, and rebuild with
-`sudo update-grub && sudo update-initramfs -u` (Debian/Ubuntu) or
-`sudo grub2-mkconfig -o /boot/grub2/grub.cfg && sudo dracut -f` (Fedora) instead
-of `sudo limine-mkinitcpio`.
-
-On Ubuntu and Debian, `sudo tools/bootstrap-ubuntu.sh` runs steps 1-4 and 7
-plus the kernel command line in one idempotent pass. Steps 5-6 (BIOS tweaks and
-thermald) and step 8 (the refresh rate) still need doing by hand.
-
-On Arch, CachyOS and Manjaro, `sudo tools/bootstrap-arch.sh` does the same. Run
-it with `sudo` from your normal user account, not from a root shell: it builds
-iio-sensor-proxy with `makepkg`, which refuses to run as root. It starts with a
-full `pacman -Syu`, since a partial upgrade would leave the system
-inconsistent - if that pulls in a new kernel, reboot into it before re-running
-so DKMS has headers to build against.
-
-Both scripts take an optional stage argument (`modules`, `sensor`, `cmdline`) to
-run just one part.
-
-### 1. dptf_enabler
-
-Unhides BIOS-gated Intel DPTF devices. Required by thermald.
-
-```
-cd modules/dptf_enabler
-sudo make install && sudo make enable
-```
-
-### 2. minibook_ec
-
-EC platform driver for thermal sensors, fan monitoring, keyboard backlight and
-input toggles. Required by thermald for its SoC and charger thermal zones.
-
-```
-cd modules/minibook_ec
-sudo make install && sudo make enable
-```
-
-Verify: `dmesg | grep minibook_ec`. See [minibook-ec.md](docs/minibook-ec.md)
-for sysfs interface documentation.
-
-### 3. i2c_designware_spklen
-
-I2C spike suppression fix. Prevents occasional touchscreen and sensor bus
-errors.
-
-```
-cd modules/i2c_designware_spklen
-sudo make install && sudo make enable
-```
-
-### 4. goodix_ts
-
-Touchscreen resume fix and OEM config loading.
-
-```
-cd modules/goodix_ts
-sudo make install && sudo make enable
-```
-
-### 5. BIOS tweaks
+thermald needs two hidden BIOS settings changed to control CPU power limits.
 
 1. Unlock the hidden BIOS menus:
    `echo 1 | sudo tee /sys/devices/platform/minibook_ec/bios_unlock`
@@ -132,12 +47,11 @@ sudo make install && sudo make enable
 1. Navigate to `Thermal Configuration -> CPU Thermal Configuration`
 1. Change `Tcc Activation Offset` to `10`
 
-These are needed for thermald to control CPU power limits. See
-[thermald.md](docs/thermald.md#bios-tweaks) for details.
+See [thermald.md](docs/thermald.md#bios-settings) for what these do.
 
-### 6. thermald
+## 3. thermald
 
-Patched thermal daemon. Requires steps 1-2 and 5 above.
+Patched thermal daemon. Requires steps 1 and 2.
 
 ```
 cd thermal_daemon
@@ -147,351 +61,50 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now thermald
 ```
 
-On Arch and Manjaro, use `make install-arch` instead - it builds via `makepkg`
+On Arch and Manjaro, use `make install-arch` instead — it builds via `makepkg`
 so pacman tracks the install. Add `IgnorePkg = thermald` to `/etc/pacman.conf`
 so upgrades don't replace it with the unpatched repo build.
 
-On Debian and Ubuntu, `sudo apt remove thermald` first so the distro package
-doesn't shadow the fork.
-
-On Fedora, `sudo dnf remove thermald` first for the same reason.
+On Debian and Ubuntu, `sudo apt remove thermald` first; on Fedora,
+`sudo dnf remove thermald` — so the distro package doesn't shadow the fork.
 
 Verify: `journalctl -u thermald | grep minibook`. See
-[thermald.md](docs/thermald.md) for patch details and tunable parameters.
+[thermald.md](docs/thermald.md) for details.
 
-### 7. iio-sensor-proxy
+## 4. Reboot and verify
 
-Screen rotation and tablet mode via dual accelerometers.
-
-```
-cd iio-sensor-proxy
-make && sudo make install
-sudo systemctl restart iio-sensor-proxy
-```
-
-On Arch and Manjaro, use `make install-arch` instead - it builds via `makepkg`
-so pacman tracks the install. Add `IgnorePkg = iio-sensor-proxy` to
-`/etc/pacman.conf` so upgrades don't replace it with the unpatched repo build.
-
-On Debian and Ubuntu, `sudo apt remove iio-sensor-proxy` first so the distro
-package doesn't shadow the fork.
-
-On Fedora, `sudo dnf remove iio-sensor-proxy` first for the same reason.
-
-The proxy exposes orientation on D-Bus (`net.hadess.SensorProxy`). How that
-becomes a screen rotation depends on your desktop:
-
-- **GNOME and KDE Plasma (Wayland)**: built-in. Enable auto-rotate in the
-  quick-settings panel / System Settings. No extra daemon needed.
-- **Niri**: install [`iio-niri`](https://github.com/Zhaith-Izaliel/iio-niri) and
-  add to one of your Niri config files (e.g.
-  `~/.config/niri/cfg/autostart.kdl`):
-  ```
-  spawn-at-startup "iio-niri" "listen" "--monitor" "DSI-1"
-  ```
-- **Sway / wlroots compositors**: use
-  [`iio-sway`](https://github.com/okeri/iio-sway) (works on Sway, river,
-  Wayfire) or an equivalent bridge for your compositor.
-- **Hyprland**: use
-  [`iio-hyprland`](https://github.com/JeanSchoeller/iio-hyprland).
-
-The patched proxy reports `right-up` whenever the device is in laptop mode, so
-the compositor applies the 270° portrait correction dynamically and switches to
-live accelerometer rotation in tablet mode. A static rotation (kernel cmdline,
-VBT patch, xrandr script) no longer stacks with this - the proxy detects and
-subtracts it, see [Display rotation](#display-rotation).
-
-Verify: `monitor-sensor` and tilt the device. See
-[iio-sensor-proxy.md](docs/iio-sensor-proxy.md) for details.
-
-### 8. VBT patcher (display refresh rate)
-
-The stock DSI panel runs at 50 Hz. The VBT patcher changes the pixel clock to
-increase the refresh rate. Build the tool first:
+Reboot, then run:
 
 ```
-cd vbt_patch
-make
+sudo tools/check-status.sh
 ```
 
-Then use `update-vbt-clock.sh` to patch, install into the initramfs, and update
-the kernel command line in one step:
+The warnings section at the end lists anything still missing. Two more status
+scripts dig deeper — see
+[GUIDE-ADVANCED.md](GUIDE-ADVANCED.md#status-scripts).
+
+## Optional: higher refresh rate
+
+The panel runs at 50 Hz stock. To try 90 Hz:
 
 ```
+cd vbt_patch && make && cd ..
 sudo tools/update-vbt-clock.sh 90
 ```
 
-This does the following:
-
-1. Reads the current VBT from debugfs
-1. Patches the pixel clock for the requested refresh rate
-1. Installs the patched VBT to `/lib/firmware/vbt`
-1. Adds the file to `mkinitcpio.conf` so it is included in the initramfs
-1. Adds `i915.vbt_firmware=vbt` to the Limine kernel command line
-1. Rebuilds the initramfs
-
-Reboot to apply. If the display flickers or shows artifacts, first make sure the
-desktop is actually running at the new rate: a saved display config that still
-pins the old rate makes the compositor fall back to a driver-synthesised mode,
-which produces identical artifacts (see
-[vbt-patch.md](docs/vbt-patch.md#what-rate-to-use)). Only if artifacts persist
-at the correct rate does the panel not support it - revert and try a lower
-value:
+**Treat this as an experiment, not a default.** Panels vary between units, and
+a rate can survive a cold boot yet fail on the first suspend/resume. Test a
+suspend cycle before relying on it, and revert if the display misbehaves:
 
 ```
 sudo tools/update-vbt-clock.sh --revert
 ```
 
-**Suspend and resume before considering the rate proven.** The DSI link is
-re-trained on resume, and a marginal clock can survive hours from a cold boot
-then fail on the first lid reopen, with no kernel error logged.
+See [vbt-patch.md](docs/vbt-patch.md) for choosing a rate and telling the two
+failure modes apart.
 
-See [vbt-patch.md](docs/vbt-patch.md) for the full tool reference and guidance
-on choosing a refresh rate.
+## Optional: screen auto-rotation on other desktops
 
-______________________________________________________________________
-
-## GPU and Vulkan
-
-The Intel N150 has UHD Graphics (Gen12.2, Alder Lake-N). Run
-`tools/gpu-status.sh` (as your normal user, not root) to see what is working. It
-checks Vulkan, VA-API, and OpenCL and lists which video codecs are available for
-hardware decode and encode.
-
-### Required packages
-
-The exact package names vary by distro. On Arch/CachyOS:
-
-| Package                 | What it provides                                |
-| ----------------------- | ----------------------------------------------- |
-| `mesa`                  | OpenGL and Vulkan (ANV) drivers for Intel       |
-| `vulkan-intel`          | Intel ANV Vulkan ICD (may be bundled with mesa) |
-| `intel-media-driver`    | VA-API hardware video acceleration (iHD driver) |
-| `intel-compute-runtime` | OpenCL support (NEO runtime)                    |
-| `vulkan-tools`          | `vulkaninfo` for `gpu-status.sh`                |
-| `libva-utils`           | `vainfo` for `gpu-status.sh`                    |
-| `clinfo`                | `clinfo` for `gpu-status.sh`                    |
-
-On CachyOS most of these are installed by default. On other distros the package
-names may differ (e.g. `mesa-vulkan-drivers` on Fedora/Ubuntu).
-
-### Enable Vulkan video decode and encode
-
-Intel's ANV driver supports hardware video decode and encode (H.264, H.265, AV1,
-VP9) but these are behind a feature flag. Add to your environment (e.g.
-`/etc/environment`):
-
-```
-ANV_DEBUG=video-decode,video-encode
-```
-
-Log out and back in for the change to take effect, then re-run
-`tools/gpu-status.sh` to confirm the codecs appear in the vulkan section.
-
-______________________________________________________________________
-
-## DSI panel
-
-The MiniBook X has a portrait-mode 1200x1920 MIPI DSI panel mounted in landscape
-orientation. It needs rotation for normal use and has a known issue with DSI
-link tearing.
-
-### Display rotation
-
-If your compositor consumes iio-sensor-proxy orientation events (see
-[§7](#7-iio-sensor-proxy) for the per-desktop list), you do not need any of the
-methods below. The patched proxy reports `right-up` in laptop mode so the
-compositor applies the 270° rotation dynamically, and switches to live
-accelerometer rotation in tablet mode. There is nothing to configure on the
-kernel/firmware side.
-
-Otherwise, pick one of the methods below for a fixed rotation.
-
-**Combining a static rotation with the proxy:** the proxy reads the DRM
-`panel orientation` property at startup and subtracts any statically-applied
-rotation (VBT patch, kernel cmdline, or i915 quirk) from what it reports, so the
-two no longer stack. If a static rotation is present, laptop mode reports
-`normal` instead of `right-up` and tablet-mode readings are de-rotated to match.
-
-`tools/check-status.sh` reports the applied rotation (read straight from the DRM
-`panel orientation` property) on the `panel rotation` line. With no static
-rotation it reads *"normal, no static rotation (laptop mode reports right-up)"*;
-after a VBT `--rotation 3` patch (or `panel_orientation=right_side_up`) it
-becomes *"right-side-up/270° (laptop mode reports normal)"*. The proxy also logs
-its own decision at startup
-(`journalctl -u iio-sensor-proxy | grep 'panel orientation'`).
-
-**On an encrypted root, use the kernel command line even if your compositor does
-consume orientation events.** The disk passphrase prompt is drawn from the
-initramfs, long before any compositor exists, so a compositor-only arrangement
-leaves it sideways. See [Encrypted boot](#encrypted-boot) below.
-
-#### Kernel command line
-
-Add the `video=` parameter to the kernel command line in `/etc/default/limine`
-(on GRUB systems, `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`):
-
-```
-video=DSI-1:panel_orientation=right_side_up
-```
-
-This tells the i915 DRM driver to apply a hardware rotation, so the console
-framebuffer and all desktop environments see the correct orientation from the
-start -- including the boot splash, TTY consoles and login screen. After
-editing, rebuild the initramfs with `sudo limine-mkinitcpio` and reboot.
-
-The four values the DRM parser recognises are `normal`, `upside_down`,
-`left_side_up` and `right_side_up`. It compares only as many characters as you
-supply, so a shorter `right` also selects `right_side_up` -- incidental
-behaviour worth not relying on, hence the full token above. A value matching
-none of the four discards the **entire** `video=` option, not just the
-orientation, and logs nothing.
-
-Confirm it took with `dmesg | grep panel_orientation`, which on success reports
-`cmdline forces connector DSI-1 panel_orientation to 3`.
-
-#### Encrypted boot
-
-The passphrase prompt for an encrypted root is rendered from the initramfs, so
-it is drawn before any compositor is running and is unaffected by
-iio-sensor-proxy. Only a rotation applied below userspace reaches it:
-
-| Layer | Covers |
-| ----- | ------ |
-| `video=DSI-1:panel_orientation=right_side_up` | Passphrase prompt, boot splash, login screen |
-| `fbcon=rotate:3` | Text consoles, if you drop to a TTY |
-
-This does not fight the patched proxy. As described under
-[Display rotation](#display-rotation) above, the proxy subtracts the DRM
-`panel orientation` from everything it reports, so laptop mode settles on the
-identity transform and tablet mode still rotates live. That subtraction happens
-in the driver rather than the compositor, so it holds whether or not yours
-treats the reported orientation as absolute.
-
-`fbcon=rotate:N` takes precedence over the orientation the console would
-otherwise inherit from `panel_orientation`, and the two do not compose
-additively -- try all four values rather than deriving one. It applies per
-virtual console as each is initialised, so writing
-`/sys/class/graphics/fbcon/rotate_all` at runtime is the equivalent for
-consoles that already exist, and `fbcon/rotate` reads back the current console
-rather than a global. All of this needs
-`CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y`; without it both the parameter and the
-sysfs writes are accepted and ignored. If the parameter appears to do nothing,
-check that and `/proc/cmdline` before reaching for the runtime write.
-
-#### Bootloader framebuffer
-
-Limine can rotate its own framebuffer (boot menu, boot splash) independently of
-the kernel. Add to `/boot/limine.conf`:
-
-```
-interface_rotation: 90
-```
-
-This only affects the Limine boot screen itself. You still need one of the other
-methods for the kernel and desktop. After editing, rebuild with
-`sudo limine-mkinitcpio`.
-
-**Stock GRUB has no equivalent.** Checked against GRUB 2.14: no rotation module
-in any module directory, no `GRUB_*` option, and `gfxterm.mod`, `video.mod` and
-`gfxmenu.mod` contain no rotation or transform strings at all. Nothing on the
-kernel command line reaches the menu either, since it is drawn before the kernel
-loads.
-
-So on GRUB the boot menu stays in the panel's native portrait orientation. That
-is a limitation of the bootloader rather than a law of physics -- rotating it
-means either building a patched GRUB whose `gfxterm` rotates its blits, or
-switching to a bootloader that already supports it, Limine being the obvious
-choice given `interface_rotation` above. Both are a lot of moving parts for a
-screen that `GRUB_TIMEOUT=0` keeps hidden on a normal boot, so the usual answer
-is to leave it sideways.
-
-#### VBT patch
-
-The `vbt_patch` tool can set the MIPI panel rotation in the Video BIOS Table.
-This makes the i915 driver treat the panel as already rotated at the hardware
-level:
-
-```
-cd vbt_patch
-make
-vbt_patch <input> --rotation 1 <output>
-```
-
-The rotation values are: 0 = 0 degrees, 1 = 90 degrees, 2 = 180 degrees, 3 = 270
-degrees. This is a firmware-level change embedded in the initramfs (see
-[VBT patcher](#8-vbt-patcher-display-refresh-rate) above). It can be combined
-with a refresh rate patch in a single `vbt_patch` invocation.
-
-#### Xrandr
-
-For X11 sessions, `xrandr` can rotate the display at the compositor level:
-
-```
-xrandr --output DSI-1 --rotate right
-```
-
-This is a runtime-only change that does not persist across reboots unless added
-to a startup script or xprofile. It does not affect the boot splash, TTY
-consoles or login screen.
-
-### DSI link tearing
-
-Panel Self Refresh (PSR) can cause DSI link tearing on this panel - the screen
-partially fills with green and horizontal lines. Disabling PSR with a kernel
-parameter seems to fix it. Add to the kernel command line in
-`/etc/default/limine`:
-
-```
-i915.enable_psr=0
-```
-
-Rebuild the initramfs with `sudo limine-mkinitcpio` and reboot.
-
-______________________________________________________________________
-
-## Sleep mode (S0ix vs S3)
-
-The MiniBook X supports two suspend modes. Check which one is active with
-`check-status.sh` or directly:
-
-```
-cat /sys/power/mem_sleep
-```
-
-The active mode is shown in brackets (e.g. `[s2idle]` or `[deep]`).
-
-### S0ix (s2idle) - software sleep
-
-Similar to how smartphones sleep: the CPU enters a low-power idle state but the
-system does not fully power down. The hardware stays partially active, allowing
-for faster wake times.
-
-### S3 (deep) - hardware sleep
-
-Traditional suspend-to-RAM. The system powers down everything except memory.
-
-**Recommended.** On the MiniBook X, S0ix does not reach its low-power
-residency states reliably and drains the battery noticeably overnight. S3
-("deep") suspends to a true low-power state and, in testing on this device,
-gives substantially better standby battery life. Switch to `deep` and make it
-the default unless you have a specific reason to keep s2idle.
-
-### Switching between modes
-
-To switch to S3 (hardware sleep, recommended):
-
-```
-echo deep | sudo tee /sys/power/mem_sleep
-```
-
-To switch to S0ix (software sleep):
-
-```
-echo s2idle | sudo tee /sys/power/mem_sleep
-```
-
-These changes do not persist across reboots. To make `deep` the default
-permanently, add `mem_sleep_default=deep` to the kernel command line in
-`/etc/default/limine` and rebuild the initramfs with `sudo limine-mkinitcpio`
-(use `mem_sleep_default=s2idle` if you ever need to go back).
+GNOME and KDE Plasma pick up rotation and tablet mode automatically. On Niri,
+Sway, Hyprland and other wlroots compositors you need a small bridge daemon —
+see [iio-sensor-proxy.md](docs/iio-sensor-proxy.md#desktop-integration).
