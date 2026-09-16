@@ -49,6 +49,7 @@
 /* Configuration overrides, read from the environment at startup */
 #define ENV_PANEL_ORIENTATION	"MINIBOOK_PANEL_ORIENTATION"
 #define ENV_LAPTOP_ORIENTATION	"MINIBOOK_LAPTOP_ORIENTATION"
+#define ENV_ORIENTATION_SENSOR	"MINIBOOK_ORIENTATION_SENSOR"
 
 /* GMTR PARB thresholds from DSDT \_SB.ACMK.GMTR */
 #define GMTR_TABLET_THRESH	185.0f
@@ -103,6 +104,11 @@ static const NameValue laptop_orientations[] = {
 	{ "left-up",   MXC_ORIENT_LEFT },
 	{ "bottom-up", MXC_ORIENT_INVERTED },
 	{ "right-up",  MXC_ORIENT_RIGHT },
+};
+
+static const NameValue orientation_sensors[] = {
+	{ "base",    0 },
+	{ "display", 1 },
 };
 
 typedef struct {
@@ -191,6 +197,9 @@ typedef struct {
 
 	/* Orientation reported whenever the device is not in tablet mode */
 	gint               laptop_orient;
+
+	/* Raw accelerometer used for orientation */
+	gint               orientation_source;
 } DrvData;
 
 static gboolean
@@ -243,6 +252,13 @@ configured_laptop_orientation (void)
 {
 	return env_value (ENV_LAPTOP_ORIENTATION, laptop_orientations,
 			  G_N_ELEMENTS (laptop_orientations), MXC_ORIENT_RIGHT);
+}
+
+static gint
+configured_orientation_source (void)
+{
+	return env_value (ENV_ORIENTATION_SENSOR, orientation_sensors,
+			  G_N_ELEMENTS (orientation_sensors), 0);
 }
 
 /* Rotation the compositor already applies for a given DRM panel orientation. */
@@ -1372,9 +1388,9 @@ poll_sensors (gpointer user_data)
 	a2 = calibrate (&raw2, drv_data->cal2);
 
 	{
-		Vec3 a1_orient = a1;
-		a1_orient.x = -a1_orient.x;
-		update_orientation_debounce (sensor_device, drv_data, &a1_orient);
+		Vec3 orient = drv_data->orientation_source == 0 ? raw1 : raw2;
+		orient.x = -orient.x;
+		update_orientation_debounce (sensor_device, drv_data, &orient);
 	}
 
 	/* Gate on the X-Z plane that compute_hinge_angle projects onto, not Y:
@@ -1440,6 +1456,7 @@ mxc6655_open (GUdevDevice *device)
 	drv_data->prev_z2 = 1.0f;
 	drv_data->panel_deg = detect_panel_rotation ();
 	drv_data->laptop_orient = configured_laptop_orientation ();
+	drv_data->orientation_source = configured_orientation_source ();
 	log_orientation_config (drv_data);
 
 	/* DSDT GMTR calibration matrices (defaults) */

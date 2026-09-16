@@ -89,12 +89,13 @@ The driver assumes the MiniBook X panel is mounted in portrait and that no
 static rotation is applied, so in laptop mode it reports `right-up` and lets the
 compositor rotate by 270 degrees. If a static rotation *is* applied it is
 normally detected from DRM (see [How it works](#how-it-works)), but detection
-does not cover every setup. Two environment variables override the defaults:
+does not cover every setup. Three environment variables override the defaults:
 
 | Variable                      | Values                                                           | Default    |
 | ----------------------------- | ---------------------------------------------------------------- | ---------- |
 | `MINIBOOK_PANEL_ORIENTATION`  | `auto`, `normal`, `upside_down`, `left_side_up`, `right_side_up` | `auto`     |
 | `MINIBOOK_LAPTOP_ORIENTATION` | `normal`, `left-up`, `bottom-up`, `right-up`                     | `right-up` |
+| `MINIBOOK_ORIENTATION_SENSOR` | `base`, `display`                                                 | `base`     |
 
 `MINIBOOK_PANEL_ORIENTATION` takes the same values as the kernel's
 `video=<connector>:panel_orientation=` -- copy whatever is on the kernel command
@@ -107,6 +108,11 @@ property does not say so.
 prints, and changes only the fixed orientation reported outside tablet mode. It
 is still compensated by the panel orientation, so it is the knob for a laptop
 mode that is wrong while tablet rotations are right.
+
+`MINIBOOK_ORIENTATION_SENSOR` selects which raw accelerometer reading supplies
+orientation: `base` selects `raw1`, and `display` selects `raw2`. The X axis is
+reversed after selection, as in the default `raw1` path. It does not change
+sensor discovery or the calibrated readings used for hinge calculation.
 
 Invalid values are ignored with a warning in the journal.
 
