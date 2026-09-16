@@ -11,6 +11,17 @@ let
     inherit pkgs;
     linuxPackages = config.boot.kernelPackages;
   };
+  generatedVbt =
+    if cfg.vbt.source == null then
+      null
+    else
+      self.lib.mkVbtFirmware {
+        inherit pkgs;
+        linuxPackages = config.boot.kernelPackages;
+        sourceVbt = cfg.vbt.source;
+        inherit (cfg.vbt) refreshRate rotation;
+      };
+  vbtPackage = if cfg.vbt.package == null then generatedVbt else cfg.vbt.package;
 
   mkEnabledOption =
     description:
@@ -77,12 +88,27 @@ in
     thermald.enable = mkEnabledOption "Enable the MiniBook-patched thermald.";
 
     vbt = {
-      enable = mkEnabledOption "Load the supplied 90 Hz, rotation-1 VBT.";
+      enable = mkEnabledOption "Generate and load a configured VBT.";
+      source = lib.mkOption {
+        type = lib.types.nullOr lib.types.path;
+        default = null;
+        example = lib.literalExpression "./firmware/source-vbt.bin";
+        description = "Original VBT captured from this machine.";
+      };
+      refreshRate = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 90;
+        description = "Refresh rate passed to vbt_patch.";
+      };
+      rotation = lib.mkOption {
+        type = lib.types.ints.between 0 3;
+        default = 1;
+        description = "Panel rotation passed to vbt_patch.";
+      };
       package = lib.mkOption {
-        type = lib.types.package;
-        default = packages.vbtFirmware;
-        defaultText = lib.literalExpression "chuwi-minibook.packages.vbtFirmware";
-        description = "Firmware package containing the VBT at lib/firmware/vbt.";
+        type = lib.types.nullOr lib.types.package;
+        default = null;
+        description = "Optional prebuilt firmware package used instead of generating a VBT.";
       };
       installPatcher = mkEnabledOption "Install the VBT inspection and patch utility.";
     };
@@ -95,6 +121,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !cfg.vbt.enable || vbtPackage != null;
+        message = ''
+          hardware.chuwi-minibook.vbt.enable requires vbt.source or vbt.package.
+          Capture the original VBT with chuwi-minibook-capture-vbt.
+        '';
+      }
+    ];
+
     nixpkgs.overlays = lib.optionals cfg.mutter.enable [
       (_final: prev: {
         mutter = prev.mutter.overrideAttrs (oldAttrs: {
@@ -140,7 +176,7 @@ in
 
     hardware.firmware =
       lib.optionals cfg.goodix.enable [ packages.goodixFirmware ]
-      ++ lib.optionals cfg.vbt.enable [ cfg.vbt.package ];
+      ++ lib.optional (cfg.vbt.enable && vbtPackage != null) vbtPackage;
 
     hardware.sensor.iio = lib.mkIf cfg.sensorProxy.enable {
       enable = true;
@@ -169,7 +205,10 @@ in
     };
 
     environment.systemPackages =
-      lib.optionals cfg.tools.enable [ packages.minibookTools ]
+      lib.optionals cfg.tools.enable [
+        packages.captureVbt
+        packages.minibookTools
+      ]
       ++ lib.optionals cfg.vbt.installPatcher [ packages.vbtPatch ];
   };
 }

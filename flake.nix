@@ -20,6 +20,29 @@
           source = self;
         };
 
+      lib.mkVbtFirmware =
+        {
+          pkgs,
+          sourceVbt,
+          refreshRate ? 90,
+          rotation ? 1,
+          linuxPackages ? pkgs.linuxPackages,
+        }:
+        let
+          packages = self.lib.mkPackages {
+            inherit linuxPackages pkgs;
+          };
+        in
+        import ./nix/vbt-firmware.nix {
+          inherit
+            pkgs
+            refreshRate
+            rotation
+            sourceVbt
+            ;
+          vbtPatch = packages.vbtPatch;
+        };
+
       nixosModules.default = import ./nix/module.nix { inherit self; };
       nixosModules.chuwi-minibook = self.nixosModules.default;
 

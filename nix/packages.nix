@@ -162,23 +162,33 @@ let
     };
   };
 
-  vbtFirmware = stdenvNoCC.mkDerivation {
-    pname = "chuwi-minibook-vbt";
-    version = "90hz-rotation1";
-    dontUnpack = true;
+  captureVbt = pkgs.writeShellApplication {
+    name = "chuwi-minibook-capture-vbt";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      if [[ $# -ne 1 ]]; then
+        echo "Usage: chuwi-minibook-capture-vbt <output-file>" >&2
+        exit 2
+      fi
 
-    installPhase = ''
-      runHook preInstall
-      install -D -m 0644 \
-        ${source}/nix/firmware/vbt-90hz-rotation1.bin \
-        $out/lib/firmware/vbt
-      runHook postInstall
+      output="$1"
+      if [[ -e "$output" ]]; then
+        echo "Refusing to overwrite existing VBT: $output" >&2
+        exit 1
+      fi
+
+      for candidate in /sys/kernel/debug/dri/*/i915_vbt; do
+        if [[ -r "$candidate" ]]; then
+          install -D -m 0644 "$candidate" "$output"
+          echo "Captured VBT from $candidate to $output"
+          exit 0
+        fi
+      done
+
+      echo "No readable i915_vbt found under /sys/kernel/debug/dri" >&2
+      exit 1
     '';
-
-    meta = {
-      description = "MiniBook X 90 Hz VBT with panel rotation 1";
-      platforms = lib.platforms.linux;
-    };
+    meta.description = "Capture the running machine's original Intel VBT";
   };
 
   minibookTools = stdenvNoCC.mkDerivation {
@@ -226,10 +236,10 @@ in
   };
 
   inherit
+    captureVbt
     goodixFirmware
     goodixTs
     minibookTools
-    vbtFirmware
     vbtPatch
     ;
 
