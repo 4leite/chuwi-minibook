@@ -15,8 +15,15 @@ Import the module:
 }
 ```
 
-Capture the original VBT from the running machine before enabling the complete
-default configuration:
+By default the module follows the repository's standard setup:
+
+- `video=DSI-1:panel_orientation=right_side_up`
+- SensorProxy's upstream defaults: automatic panel detection, `right-up` laptop
+  orientation, and the base orientation sensor
+- no VBT override
+
+The VBT refresh-rate modification is experimental and requires an original VBT
+captured from the machine. Capture it before enabling the VBT option:
 
 ```sh
 sudo nix run github:4leite/chuwi-minibook/chewbacca#captureVbt -- \
@@ -30,13 +37,12 @@ the host configuration, then configure its path:
 hardware.chuwi-minibook.vbt.source = ./firmware/source-vbt.bin;
 ```
 
-The module enables the tested MiniBook X N150 configuration by default:
+The remaining MiniBook fixes are enabled by default:
 
 - all four kernel-module fixes
 - patched Goodix firmware
-- patched SensorProxy using the display accelerometer
+- patched SensorProxy
 - patched thermald
-- VBT generated from the captured original at 90 Hz with panel rotation 1
 - disabled panel self refresh
 - patched Mutter tablet-to-laptop transform handling
 - repository diagnostic and VBT tools
@@ -62,6 +68,7 @@ The VBT settings are declarative:
 
 ```nix
 hardware.chuwi-minibook.vbt = {
+  enable = true;
   source = ./firmware/source-vbt.bin;
   refreshRate = 90;
   rotation = 1;
@@ -81,6 +88,9 @@ i2cDesignwareSpklen.enable
 sensorProxy.enable
 sensorProxy.setConvertibleChassis
 thermald.enable
+kernelPanelOrientation.enable
+kernelPanelOrientation.connector
+kernelPanelOrientation.orientation
 vbt.enable
 vbt.source
 vbt.refreshRate

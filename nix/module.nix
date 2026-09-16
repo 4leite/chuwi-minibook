@@ -62,7 +62,7 @@ in
           "left_side_up"
           "right_side_up"
         ];
-        default = "normal";
+        default = "auto";
         description = "Static panel orientation reported to the MiniBook sensor driver.";
       };
       laptopOrientation = lib.mkOption {
@@ -80,15 +80,34 @@ in
           "base"
           "display"
         ];
-        default = "display";
+        default = "base";
         description = "Physical accelerometer used for screen orientation.";
       };
     };
 
     thermald.enable = mkEnabledOption "Enable the MiniBook-patched thermald.";
 
+    kernelPanelOrientation = {
+      enable = mkEnabledOption "Set the built-in panel orientation through the kernel command line.";
+      connector = lib.mkOption {
+        type = lib.types.str;
+        default = "DSI-1";
+        description = "DRM connector receiving the panel_orientation kernel parameter.";
+      };
+      orientation = lib.mkOption {
+        type = lib.types.enum [
+          "normal"
+          "upside_down"
+          "left_side_up"
+          "right_side_up"
+        ];
+        default = "right_side_up";
+        description = "Panel orientation passed to the kernel.";
+      };
+    };
+
     vbt = {
-      enable = mkEnabledOption "Generate and load a configured VBT.";
+      enable = lib.mkEnableOption "generation and loading of a configured VBT";
       source = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = null;
@@ -143,6 +162,9 @@ in
 
     boot.kernelParams =
       lib.optionals cfg.disablePanelSelfRefresh [ "i915.enable_psr=0" ]
+      ++ lib.optionals (cfg.kernelPanelOrientation.enable && !cfg.vbt.enable) [
+        "video=${cfg.kernelPanelOrientation.connector}:panel_orientation=${cfg.kernelPanelOrientation.orientation}"
+      ]
       ++ lib.optionals cfg.vbt.enable [ "i915.vbt_firmware=vbt" ];
 
     boot.initrd.extraFirmwarePaths = lib.optionals cfg.vbt.enable [ "vbt" ];
