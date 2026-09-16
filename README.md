@@ -46,6 +46,12 @@ Fork of iio-sensor-proxy with a dual-accelerometer driver for the two MXC6655
 chips (display + base). Computes the hinge angle for automatic tablet mode
 detection and provides screen orientation for auto-rotation.
 
+### gnome-tablet-exit-orientation - GNOME tablet-exit workaround
+
+Optional workaround for a Mutter bug that leaves native-portrait displays
+sideways after returning to laptop mode. Restores the built-in display to
+logical transform 0 when GNOME stops managing panel orientation.
+
 ### [vbt_patch](docs/vbt-patch.md) - display refresh rate
 
 Patches the Video BIOS Table to increase the DSI panel's refresh rate from the

@@ -189,6 +189,50 @@ static rotation (kernel cmdline, VBT patch, xrandr script) - they will stack.
 Verify: `monitor-sensor` and tilt the device. See
 [iio-sensor-proxy.md](docs/iio-sensor-proxy.md) for details.
 
+#### GNOME tablet-exit workaround
+
+Mutter 49 and 50 can leave a native-portrait display sideways when returning
+from tablet mode. This is
+[Mutter issue #4650](https://gitlab.gnome.org/GNOME/mutter/-/issues/4650);
+[merge request !4898](https://gitlab.gnome.org/GNOME/mutter/-/merge_requests/4898)
+contains the upstream fix.
+
+The optional helper restores the built-in display to logical transform 0 after
+GNOME stops managing panel orientation. It does not change SensorProxy readings
+or the DRM panel orientation.
+
+Install Python and PyGObject first:
+
+- Arch/Manjaro: `sudo pacman -S python python-gobject`
+- Debian/Ubuntu: `sudo apt install python3 python3-gi`
+- Fedora: `sudo dnf install python3 python3-gobject`
+
+Then install and enable the user service:
+
+```
+cd gnome-tablet-exit-orientation
+sudo make install
+systemctl --user daemon-reload
+systemctl --user enable --now gnome-tablet-exit-orientation.service
+```
+
+Check it with:
+
+```
+systemctl --user status gnome-tablet-exit-orientation.service
+journalctl --user -u gnome-tablet-exit-orientation.service
+```
+
+Remove this workaround after upgrading to a Mutter release containing the
+upstream fix:
+
+```
+systemctl --user disable --now gnome-tablet-exit-orientation.service
+cd gnome-tablet-exit-orientation
+sudo make uninstall
+systemctl --user daemon-reload
+```
+
 ### 8. VBT patcher (display refresh rate)
 
 The stock DSI panel runs at 50 Hz. The VBT patcher changes the pixel clock to

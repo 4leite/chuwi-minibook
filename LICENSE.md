@@ -29,10 +29,10 @@ Each fork retains the license of its upstream project.
 | ----------------------- | ------- | -------------------------------------------- |
 | `vbt_patch/vbt_patch.c` | GPL-2.0 | Includes Linux kernel VBT definition headers |
 
-## Scripts
+## Scripts and service files
 
-All original shell scripts in `tools/` are licensed under the **Zero-Clause BSD
-License (0BSD)**:
+All original shell and Python scripts and service files are licensed under the
+**Zero-Clause BSD License (0BSD)**:
 
 > Permission to use, copy, modify, and/or distribute this software for any
 > purpose with or without fee is hereby granted.
@@ -52,6 +52,7 @@ This applies to:
 - `tools/gpu-status.sh`
 - `tools/detect-hardware.sh`
 - `tools/update-vbt-clock.sh`
+- `gnome-tablet-exit-orientation/`
 
 ## Documentation
 
