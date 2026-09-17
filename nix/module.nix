@@ -12,7 +12,7 @@ let
     linuxPackages = config.boot.kernelPackages;
   };
   generatedVbt =
-    if cfg.vbt.source == null then
+    if cfg.vbt.source == null || (cfg.vbt.refreshRate == null && cfg.vbt.rotation == null) then
       null
     else
       self.lib.mkVbtFirmware {
@@ -115,14 +115,16 @@ in
         description = "Original VBT captured from this machine.";
       };
       refreshRate = lib.mkOption {
-        type = lib.types.ints.positive;
-        default = 90;
-        description = "Refresh rate passed to vbt_patch.";
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        example = 90;
+        description = "Optional refresh rate passed to vbt_patch.";
       };
       rotation = lib.mkOption {
-        type = lib.types.ints.between 0 3;
-        default = 1;
-        description = "Panel rotation passed to vbt_patch.";
+        type = lib.types.nullOr (lib.types.ints.between 0 3);
+        default = null;
+        example = 1;
+        description = "Optional panel rotation passed to vbt_patch.";
       };
       package = lib.mkOption {
         type = lib.types.nullOr lib.types.package;
@@ -144,8 +146,8 @@ in
       {
         assertion = !cfg.vbt.enable || vbtPackage != null;
         message = ''
-          hardware.chuwi-minibook.vbt.enable requires vbt.source or vbt.package.
-          Capture the original VBT with chuwi-minibook-capture-vbt.
+          hardware.chuwi-minibook.vbt.enable requires either vbt.package, or
+          vbt.source plus at least one of vbt.refreshRate and vbt.rotation.
         '';
       }
     ];

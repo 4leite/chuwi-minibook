@@ -75,6 +75,10 @@ hardware.chuwi-minibook.vbt = {
 };
 ```
 
+`refreshRate` and `rotation` have no implicit values. Enabling generated VBT
+firmware requires the captured source and at least one explicit modification.
+Either modification can be used independently.
+
 Nix builds `vbt_patch`, generates the firmware, and reuses the cached result
 until the source VBT, settings, or patcher changes.
 

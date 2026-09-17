@@ -5,9 +5,26 @@
   sourceVbt,
   vbtPatch,
 }:
+let
+  inherit (pkgs) lib;
+  patchArguments =
+    lib.optionals (refreshRate != null) [
+      "--hz"
+      (toString refreshRate)
+    ]
+    ++ lib.optionals (rotation != null) [
+      "--rotation"
+      (toString rotation)
+    ];
+  version = lib.concatStringsSep "-" (
+    lib.optional (refreshRate != null) "${toString refreshRate}hz"
+    ++ lib.optional (rotation != null) "rotation${toString rotation}"
+  );
+in
+assert patchArguments != [ ];
 pkgs.stdenvNoCC.mkDerivation {
   pname = "chuwi-minibook-vbt";
-  version = "${toString refreshRate}hz-rotation${toString rotation}";
+  inherit version;
   dontUnpack = true;
   nativeBuildInputs = [ vbtPatch ];
 
@@ -16,8 +33,7 @@ pkgs.stdenvNoCC.mkDerivation {
     mkdir -p $out/lib/firmware
     vbt_patch \
       ${sourceVbt} \
-      --hz ${toString refreshRate} \
-      --rotation ${toString rotation} \
+      ${lib.escapeShellArgs patchArguments} \
       $out/lib/firmware/vbt
     runHook postInstall
   '';

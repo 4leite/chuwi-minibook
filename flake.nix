@@ -24,8 +24,8 @@
         {
           pkgs,
           sourceVbt,
-          refreshRate ? 90,
-          rotation ? 1,
+          refreshRate ? null,
+          rotation ? null,
           linuxPackages ? pkgs.linuxPackages,
         }:
         let
