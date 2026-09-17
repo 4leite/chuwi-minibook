@@ -1,4 +1,4 @@
-{ self }:
+{ source }:
 {
   config,
   lib,
@@ -7,19 +7,19 @@
 }:
 let
   cfg = config.hardware.chuwi-minibook;
-  packages = self.lib.mkPackages {
-    inherit pkgs;
+  packages = import ./packages.nix {
+    inherit pkgs source;
     linuxPackages = config.boot.kernelPackages;
   };
   generatedVbt =
     if cfg.vbt.source == null || (cfg.vbt.refreshRate == null && cfg.vbt.rotation == null) then
       null
     else
-      self.lib.mkVbtFirmware {
+      import ./vbt-firmware.nix {
         inherit pkgs;
-        linuxPackages = config.boot.kernelPackages;
-        sourceVbt = cfg.vbt.source;
         inherit (cfg.vbt) refreshRate rotation;
+        sourceVbt = cfg.vbt.source;
+        vbtPatch = packages.vbtPatch;
       };
   vbtPackage = if cfg.vbt.package == null then generatedVbt else cfg.vbt.package;
 

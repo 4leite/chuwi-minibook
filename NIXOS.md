@@ -1,7 +1,7 @@
 # NixOS
 
-The flake provides a NixOS module and packages for the MiniBook fixes in this
-repository. Add it as an input:
+The flake provides a NixOS module for the MiniBook fixes in this repository.
+Add it as an input:
 
 ```nix
 inputs.chuwi-minibook.url = "github:4leite/chuwi-minibook/chewbacca";
@@ -26,12 +26,13 @@ The VBT refresh-rate modification is experimental and requires an original VBT
 captured from the machine. Capture it before enabling the VBT option:
 
 ```sh
-sudo nix run github:4leite/chuwi-minibook/chewbacca#captureVbt -- \
+sudo chuwi-minibook-capture-vbt \
   /path/to/your/config/firmware/source-vbt.bin
 ```
 
-The command refuses to replace an existing capture. Add the captured file to
-the host configuration, then configure its path:
+The capture command is installed when the module is enabled and refuses to
+replace an existing capture. Add the captured file to the host configuration,
+then configure its path:
 
 ```nix
 hardware.chuwi-minibook.vbt.source = ./firmware/source-vbt.bin;
