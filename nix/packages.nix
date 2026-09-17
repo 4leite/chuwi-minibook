@@ -252,5 +252,6 @@ in
   thermald = pkgs.thermald.overrideAttrs (_oldAttrs: {
     version = "2.5.11.minibook1";
     src = "${source}/thermal_daemon";
+    patches = [ ];
   });
 }
