@@ -156,3 +156,10 @@ sample goes through:
    from every reported orientation, so the dynamic and static rotations do not
    stack. The detected orientation is logged at startup (`grep 'panel
    orientation'` in the journal).
+
+## Known issues
+
+Per https://github.com/fstanis/chuwi-minibook/issues/10#issuecomment-5690525031
+there's [a known issue](https://gitlab.gnome.org/GNOME/mutter/-/issues/4650) in
+[Mutter](https://mutter.gnome.org) which applies the wrong rotation when
+returning from tablet mode back into laptop mode.
