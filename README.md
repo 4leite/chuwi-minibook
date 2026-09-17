@@ -27,7 +27,7 @@ See [GUIDE.md](GUIDE.md) for the standard setup and
 GPU setup and display rotation details.
 
 NixOS users can install the complete stack, or select individual fixes, with
-the repository flake. See [NIXOS.md](NIXOS.md).
+the repository flake. See [tools/nix/NIXOS.md](tools/nix/NIXOS.md).
 
 ## Components
 

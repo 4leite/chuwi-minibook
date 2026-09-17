@@ -45,8 +45,10 @@ The remaining MiniBook fixes are enabled by default:
 - patched SensorProxy
 - patched thermald
 - disabled panel self refresh
-- patched Mutter tablet-to-laptop transform handling
 - repository diagnostic and VBT tools
+
+The Mutter tablet-to-laptop transform patch is disabled by default. Enable it
+only on systems using Mutter.
 
 Every part can be changed independently under `hardware.chuwi-minibook`.
 For example:
@@ -56,7 +58,7 @@ hardware.chuwi-minibook = {
   goodix.enable = false;
   thermald.enable = false;
   vbt.enable = false;
-  mutter.enable = false;
+  mutter.enable = true;
 
   sensorProxy = {
     orientationSensor = "base";

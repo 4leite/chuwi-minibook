@@ -138,7 +138,7 @@ in
 
     disablePanelSelfRefresh = mkEnabledOption "Disable i915 panel self refresh to reduce DSI corruption.";
 
-    mutter.enable = mkEnabledOption "Apply the logical-normal built-in panel transform fix to Mutter.";
+    mutter.enable = lib.mkEnableOption "the logical-normal built-in panel transform fix for Mutter";
   };
 
   config = lib.mkIf cfg.enable {
@@ -156,7 +156,10 @@ in
       (_final: prev: {
         mutter = prev.mutter.overrideAttrs (oldAttrs: {
           patches = (oldAttrs.patches or [ ]) ++ [
-            ./patches/mutter-logical-normal-orientation.patch
+            (pkgs.fetchpatch {
+              url = "https://gitlab.gnome.org/GNOME/mutter/-/commit/ebcac7d67b35fb3cf8a9dd86a5efe35a741b90cb.patch";
+              hash = "sha256-NpEWqVNNIBHYY/UNzsLC35EK6ZlQgTxhDm4QYsyvd0k=";
+            })
           ];
         });
       })
