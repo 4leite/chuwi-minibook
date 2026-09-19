@@ -1,114 +1,211 @@
 # NixOS
 
-The flake provides a NixOS module for the MiniBook fixes in this repository.
-Add it as an input:
+This flake provides a NixOS module for the CHUWI MiniBook X.
 
-```nix
-inputs.chuwi-minibook.url = "github:fstanis/chuwi-minibook";
-```
+## Install
 
-Import the module:
+Add the input and module to your `flake.nix`:
 
 ```nix
 {
-  imports = [ inputs.chuwi-minibook.nixosModules.default ];
+  inputs.chuwi-minibook.url = "github:fstanis/chuwi-minibook";
+
+  outputs =
+    {
+      nixpkgs,
+      chuwi-minibook,
+      ...
+    }:
+    {
+      nixosConfigurations.minibook = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          chuwi-minibook.nixosModules.default
+          ./configuration.nix
+        ];
+      };
+    };
 }
 ```
 
-By default the module follows the repository's standard setup:
+Replace `minibook` with your configuration name, then rebuild and reboot:
 
-- `video=DSI-1:panel_orientation=right_side_up`
-- SensorProxy's upstream defaults: automatic panel detection, `right-up` laptop
-  orientation, and the base orientation sensor
-- no VBT override
+```sh
+sudo nixos-rebuild boot --flake .#minibook
+sudo reboot
+```
 
-The VBT refresh-rate modification is experimental and requires an original VBT
-captured from the machine. Capture it before enabling the VBT option:
+Importing the module enables:
+
+- touchscreen fixes
+- MiniBook EC and DPTF support
+- I2C error handling
+- tablet mode and automatic screen rotation
+- MiniBook thermald
+- the Panel Self Refresh workaround
+- kernel panel rotation
+- MiniBook diagnostic tools
+
+VBT changes and the Mutter patch are opt-in.
+
+## Display rotation
+
+The default is correct for the MiniBook X:
+
+```nix
+hardware.chuwi-minibook.kernelPanelOrientation = {
+  enable = true;
+  connector = "DSI-1";
+  orientation = "right_side_up";
+};
+```
+
+This rotates the built-in display through the kernel.
+
+## Higher refresh rate
+
+The stock display rate is 50 Hz. Higher rates are experimental. Test the chosen
+rate after a cold boot and after suspend and resume.
+
+First boot with `vbt.enable = false`. Capture the stock VBT:
 
 ```sh
 sudo chuwi-minibook-capture-vbt \
-  /path/to/your/config/firmware/source-vbt.bin
+  /path/to/your/nixos-config/firmware/source-vbt.bin
 ```
 
-The capture command is installed when the module is enabled and refuses to
-replace an existing capture. Add the captured file to the host configuration,
-then configure its path:
+Add it to your Git flake:
 
-```nix
-hardware.chuwi-minibook.vbt.source = ./firmware/source-vbt.bin;
+```sh
+git add firmware/source-vbt.bin
 ```
 
-The remaining MiniBook fixes are enabled by default:
-
-- all four kernel-module fixes
-- patched Goodix firmware
-- patched SensorProxy
-- patched thermald
-- disabled panel self refresh
-- repository diagnostic and VBT tools
-
-The Mutter tablet-to-laptop transform patch is disabled by default. Enable it
-only on systems using Mutter.
-
-Every part can be changed independently under `hardware.chuwi-minibook`.
-For example:
+To use 60 Hz with kernel rotation:
 
 ```nix
 hardware.chuwi-minibook = {
-  goodix.enable = false;
-  thermald.enable = false;
-  vbt.enable = false;
-  mutter.enable = true;
+  kernelPanelOrientation.enable = true;
 
-  sensorProxy = {
-    orientationSensor = "base";
-    panelOrientation = "auto";
+  vbt = {
+    enable = true;
+    source = ./firmware/source-vbt.bin;
+    refreshRate = 60;
   };
 };
 ```
 
-The VBT settings are declarative:
+Change `refreshRate` to test another rate. Rebuild, reboot, and select the new
+rate in your desktop display settings.
+
+To return to the stock VBT:
 
 ```nix
-hardware.chuwi-minibook.vbt = {
-  enable = true;
-  source = ./firmware/source-vbt.bin;
-  refreshRate = 90;
-  rotation = 1;
+hardware.chuwi-minibook.vbt.enable = false;
+```
+
+## VBT rotation
+
+Kernel rotation is the recommended method. To use VBT rotation instead:
+
+```nix
+hardware.chuwi-minibook = {
+  kernelPanelOrientation.enable = false;
+
+  vbt = {
+    enable = true;
+    source = ./firmware/source-vbt.bin;
+    refreshRate = 90;
+    rotation = 1;
+  };
 };
 ```
 
-`refreshRate` and `rotation` have no implicit values. Enabling generated VBT
-firmware requires the captured source and at least one explicit modification.
-Either modification can be used independently. `kernelPanelOrientation` is a
-separate setting controlled only by `kernelPanelOrientation.enable`.
+`rotation = 1` is the correct MiniBook X value for `right_side_up`.
 
-Nix builds `vbt_patch`, generates the firmware, and reuses the cached result
-until the source VBT, settings, or patcher changes.
+| VBT value | Panel orientation |
+| --------- | ----------------- |
+| `0`       | `normal`          |
+| `1`       | `right_side_up`   |
+| `2`       | `upside_down`     |
+| `3`       | `left_side_up`    |
 
-The available component switches are:
+The values describe how the panel is mounted.
 
-```text
-goodix.enable
-minibookEc.enable
-dptfEnabler.enable
-i2cDesignwareSpklen.enable
-sensorProxy.enable
-sensorProxy.setConvertibleChassis
-thermald.enable
-kernelPanelOrientation.enable
-kernelPanelOrientation.connector
-kernelPanelOrientation.orientation
-vbt.enable
-vbt.source
-vbt.refreshRate
-vbt.rotation
-vbt.installPatcher
-tools.enable
-disablePanelSelfRefresh
-mutter.enable
+## GNOME and Mutter
+
+Use these settings together on GNOME:
+
+```nix
+hardware.chuwi-minibook = {
+  sensorProxy.panelOrientation = "normal";
+  mutter.enable = true;
+};
 ```
 
-The DPTF module's optional participants are controlled by
-`dptfEnabler.enableFans` and `dptfEnabler.enableSensors`. Both default to
-`false`, matching the upstream module defaults.
+- `panelOrientation = "normal"` gives Mutter correctly aligned SensorProxy
+  readings during tablet rotation.
+- `mutter.enable = true` returns the display to the correct direction when
+  leaving tablet mode.
+
+The first build takes longer because it rebuilds Mutter.
+
+## SensorProxy
+
+The defaults are:
+
+```nix
+hardware.chuwi-minibook.sensorProxy = {
+  enable = true;
+  setConvertibleChassis = true;
+  panelOrientation = "auto";
+  laptopOrientation = "right-up";
+  orientationSensor = "base";
+};
+```
+
+Settings:
+
+- `panelOrientation`: static panel orientation used by SensorProxy.
+- `laptopOrientation`: orientation reported in laptop mode.
+- `orientationSensor`: `base` or `display` accelerometer for screen rotation.
+- `setConvertibleChassis`: identify the MiniBook X as a convertible.
+
+## Components
+
+Set any switch to `false` to disable that part.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `enable` | `true` | Complete MiniBook configuration |
+| `goodix.enable` | `true` | Touchscreen driver and firmware |
+| `minibookEc.enable` | `true` | Fan, thermal sensor, keyboard and touchpad EC support |
+| `dptfEnabler.enable` | `true` | Intel DPTF devices used by thermald |
+| `i2cDesignwareSpklen.enable` | `true` | I2C error workaround |
+| `sensorProxy.enable` | `true` | Tablet mode and screen rotation |
+| `sensorProxy.setConvertibleChassis` | `true` | Convertible chassis classification |
+| `thermald.enable` | `true` | MiniBook thermald service |
+| `kernelPanelOrientation.enable` | `true` | Kernel display rotation |
+| `vbt.enable` | `false` | Custom VBT |
+| `disablePanelSelfRefresh` | `true` | Display corruption workaround |
+| `mutter.enable` | `false` | Mutter tablet-exit rotation fix |
+| `tools.enable` | `true` | Status and VBT capture commands |
+
+Extra DPTF participants:
+
+```nix
+hardware.chuwi-minibook.dptfEnabler = {
+  enableFans = false;
+  enableSensors = false;
+};
+```
+
+## Check the result
+
+After rebooting:
+
+```sh
+sudo chuwi-check-status
+```
+
+Check the display direction, touch input, tablet mode, automatic rotation,
+thermald, and suspend/resume.
